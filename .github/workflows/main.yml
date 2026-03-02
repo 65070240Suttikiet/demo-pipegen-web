@@ -1,70 +1,40 @@
-name: Advanced Single Job Pipeline
-
-# 1. ทริกเกอร์กดรันด้วยมือ (Manual Trigger) พร้อมรับค่า Input
+name: Auto-Generated-Pipeline
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
-    inputs:
-      debug_mode:
-        description: 'Enable debug logging'
-        required: false
-        type: boolean
-        default: false
-
-# 2. ตัวแปร Environment แบบกำหนดเอง
-env:
-  API_URL: "https://api.example.com"
-  NODE_ENV: "production"
-
-# 3. จัดการการรันซ้ำซ้อน (ถ้ากด push มารัวๆ ให้ยกเลิกอันเก่า รันแค่อันล่าสุด)
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
 jobs:
-  build-and-test:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    
-    # 4. ตั้งเวลา Timeout ป้องกัน Job ค้างกินโควต้า
-    timeout-minutes: 15
-    
-    # 5. ขอสิทธิ์ให้ GITHUB_TOKEN (สำคัญมากเวลาต้อง push กลับไปที่ Repo)
-    permissions:
-      contents: write
-      packages: read
-
-    # 6. จำลอง Database (Service Containers) ผูกมากับ Job นี้เลย
-    services:
-      redis:
-        image: redis:alpine
-        ports:
-          - 6379:6379
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
+      - name: Prepare Package Manager
+        run: |
+          if [ "npm" == "pnpm" ]; then
+            npm install -g pnpm
+          elif [ "npm" == "yarn" ]; then
+            npm install -g yarn
+          elif [ "npm" == "bun" ]; then
+            npm install -g bun
+          fi
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          
+          node-version: '20'
+          cache: 'npm'
       - name: Install Dependencies
         run: npm ci
-
-      # 7. สคริปต์แบบมีเงื่อนไข (If Condition) 
-      - name: Run Tests with Debug
-        if: ${{ github.event.inputs.debug_mode == 'true' }}
+      - name: Run Tests
+        run: npm test
+      - name: Build Project
+        run: npm run build
+      - name: Build Docker Image
+        run: docker build -t username/repo:latest .
+      - name: Push to Docker Hub
+        if: false
         run: |
-          echo "Debug mode is ON"
-          DEBUG=* npm run test
-
-      - name: Normal Tests
-        if: ${{ github.event.inputs.debug_mode != 'true' }}
-        run: npm run test
-
-      # 8. สเตปแจ้งเตือนที่จะรันเฉพาะตอนที่พังเท่านั้น (failure)
-      - name: Slack Notification on Failure
-        if: failure()
-        run: echo "Alert! Pipeline failed! 🚨"
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          docker push username/repo:latest
