@@ -35,10 +35,10 @@ jobs:
           npm install
 
       - name: Build Docker Image
-        run: docker build -t username/repo:latest .
+        run: docker build -t tigerntun/repo:latest .
 
       - name: Push to Docker Hub
-        if: true
+        if: false
         run: |
           echo "docker build -t username/repo:latest ." | docker login -u "docker build -t username/repo:latest ." --password-stdin
-          docker push username/repo:latest
+          docker push tigerntun/repo:latest
