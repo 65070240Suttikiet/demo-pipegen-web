@@ -1,70 +1,52 @@
 name: Advanced Single Job Pipeline
-
-# 1. ทริกเกอร์กดรันด้วยมือ (Manual Trigger) พร้อมรับค่า Input
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
-    inputs:
-      debug_mode:
-        description: 'Enable debug logging'
-        required: false
-        type: boolean
-        default: false
-
-# 2. ตัวแปร Environment แบบกำหนดเอง
+'on':
+  workflow_dispatch: null
 env:
-  API_URL: "https://api.example.com"
-  NODE_ENV: "production"
-
-# 3. จัดการการรันซ้ำซ้อน (ถ้ากด push มารัวๆ ให้ยกเลิกอันเก่า รันแค่อันล่าสุด)
+  API_URL: https://api.example.com
+  NODE_ENV: production
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    
-    # 4. ตั้งเวลา Timeout ป้องกัน Job ค้างกินโควต้า
     timeout-minutes: 15
-    
-    # 5. ขอสิทธิ์ให้ GITHUB_TOKEN (สำคัญมากเวลาต้อง push กลับไปที่ Repo)
     permissions:
       contents: write
       packages: read
-
-    # 6. จำลอง Database (Service Containers) ผูกมากับ Job นี้เลย
     services:
       redis:
         image: redis:alpine
         ports:
-          - 6379:6379
-
+          - '6379:6379'
     steps:
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          
-      - name: Install Dependencies
-        run: npm ci
+          node-version: '20'
 
-      # 7. สคริปต์แบบมีเงื่อนไข (If Condition) 
+      - name: Install Dependencies
+        run: |
+          if ! command -v npm > /dev/null 2>&1; then npm install -g npm; fi
+          npm ci
+
       - name: Run Tests with Debug
         if: ${{ github.event.inputs.debug_mode == 'true' }}
         run: |
           echo "Debug mode is ON"
           DEBUG=* npm run test
 
+      - name: Run Tests
+        run: npm test
+
       - name: Normal Tests
         if: ${{ github.event.inputs.debug_mode != 'true' }}
         run: npm run test
 
-      # 8. สเตปแจ้งเตือนที่จะรันเฉพาะตอนที่พังเท่านั้น (failure)
       - name: Slack Notification on Failure
         if: failure()
         run: echo "Alert! Pipeline failed! 🚨"
